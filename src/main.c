@@ -18,52 +18,111 @@
  * THIS FILE IS TO BE MODIFIED
  */
 
-#include <stddef.h>			/* NULL */
-#include <stdio.h>			/* setbuf, printf */
+#include <stddef.h> /* NULL */
+#include <stdio.h>  /* setbuf, printf */
 #include <stdlib.h>
+#include <string.h>/*strcmp, strlen,...*/
+#include <sys/stat.h>
+#include <unistd.h>
+#define ansiblue "\033[1;36m"
+#define ansigreen "\x1b[1;32m"
+#define ansireset "\x1b[0m"
 
-extern int obtain_order();		/* See parser.y for description */
+enum comandos {
+  CD = 1,
+  UMASK,
+  LIMIT,
+  SET,
+};
+char *home;
 
-int main(void)
-{
-	char ***argvv = NULL;
-	int argvc;
-	char **argv = NULL;
-	int argc;
-	char *filev[3] = { NULL, NULL, NULL };
-	int bg;
-	int ret;
+extern int obtain_order(char ****argvvp, char *filep[3],
+                        int *bgp); /* See parser.y for description */
+int cd(char *direccion) {
+  if (direccion != NULL)
+    return chdir(direccion);
+  return chdir(home);
+}
 
-	setbuf(stdout, NULL);			/* Unbuffered */
-	setbuf(stdin, NULL);
+int mascara(char *entrada) {
+  if (entrada == NULL) {
+    mode_t mascAnt = umask(0);
+    umask(mascAnt);
+    return mascAnt;
+  }
+  int octal;
+  octal = strtol(entrada, NULL, 8);
+  mode_t mascAnt = umask(octal);
+  return mascAnt;
+}
 
-	while (1) {
-		fprintf(stderr, "%s", "msh> ");	/* Prompt */
-		ret = obtain_order(&argvv, filev, &bg);
-		if (ret == 0) break;		/* EOF */
-		if (ret == -1) continue;	/* Syntax error */
-		argvc = ret - 1;		/* Line */
-		if (argvc == 0) continue;	/* Empty line */
+int set();
+
+/*TODO: método switch (o switch dentro del main) para seleccionar los otros
+ * métodos*/
+
+int main(void) {
+  fprintf(stderr, "\n");
+  char ***argvv = NULL;
+  int argvc;
+  char **argv = NULL;
+  int argc;
+  char *filev[3] = {NULL, NULL, NULL};
+  int bg;
+  int ret;
+  home = getenv("HOME");
+
+  setbuf(stdout, NULL); /* Unbuffered */
+  setbuf(stdin, NULL);
+
+  while (1) {
+    char cwd[256];
+    getcwd(cwd, sizeof(cwd));
+    fprintf(stderr, ansiblue "%s\n", cwd);
+    fprintf(stderr, ansigreen "☭ > " ansireset);
+
+    ret = obtain_order(&argvv, filev, &bg);
+    if (ret == 0)
+      break; /* EOF */
+    if (ret == -1)
+      continue;      /* Syntax error */
+    argvc = ret - 1; /* Line */
+    if (argvc == 0)
+      continue; /* Empty line */
 #if 1
-/*
- * LAS LINEAS QUE A CONTINUACION SE PRESENTAN SON SOLO
- * PARA DAR UNA IDEA DE COMO UTILIZAR LAS ESTRUCTURAS
- * argvv Y filev. ESTAS LINEAS DEBERAN SER ELIMINADAS.
- */
-		for (argvc = 0; (argv = argvv[argvc]); argvc++) {
-			for (argc = 0; argv[argc]; argc++)
-				printf("%s ", argv[argc]);
-			printf("\n");
-		}
-		if (filev[0]) printf("< %s\n", filev[0]);/* IN */
-		if (filev[1]) printf("> %s\n", filev[1]);/* OUT */
-		if (filev[2]) printf(">& %s\n", filev[2]);/* ERR */
-		if (bg) printf("&\n");
+
+    /*TODO: el cd*/
+
+    /*
+     * LAS LINEAS QUE A CONTINUACION SE PRESENTAN SON SOLO
+     * PARA DAR UNA IDEA DE COMO UTILIZAR LAS ESTRUCTURAS
+     * argvv Y filev. ESTAS LINEAS DEBERAN SER ELIMINADAS.
+     */
+    for (argvc = 0; (argv = argvv[argvc]); argvc++) {
+      if (strcmp(argv[0], "cd") == 0) {
+        int a = cd(argv[1]);
+        if (a == -1)
+          printf("Directorio inválido");
+      } else if (strcmp(argv[0], "umask") == 0) {
+        int a = mascara(argv[1]);
+        printf("%o\n", a);
+      }
+      for (argc = 0; argv[argc]; argc++) {
+        // printf("%s ", argv[argc]);
+      }
+      printf("\n");
+    }
+  }
+  if (filev[1])
+    printf("> %s\n", filev[1]); /* OUT */
+  if (filev[2])
+    printf(">& %s\n", filev[2]); /* ERR */
+  if (bg)
+    printf("&\n");
 /*
  * FIN DE LA PARTE A ELIMINAR
  */
 #endif
-	}
-	exit(0);
-	return 0;
+  exit(0);
+  return 0;
 }
