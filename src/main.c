@@ -90,10 +90,33 @@ int limit(int recurso, char *argv, char *entrada) {
     limite->rlim_max = lmt;
     setrlimit(recurso, limite);
   }
+  free(limite);
   return 0;
 }
 
-int set(char *variable, );
+int sets() {
+  fprintf(stdout, "%s=%s\n", "USER", getenv("USER"));
+  fprintf(stdout, "%s=%s\n", "LOGNAME", getenv("LOGNAME"));
+  fprintf(stdout, "%s=%s\n", "HOME", getenv("HOME"));
+  fprintf(stdout, "%s=%s\n", "LANG", getenv("LANG"));
+  fprintf(stdout, "%s=%s\n", "PATH", getenv("PATH"));
+  fprintf(stdout, "%s=%s\n", "PWD", getenv("PWD"));
+  fprintf(stdout, "%s=%s\n", "SHELL", getenv("SHELL"));
+  fprintf(stdout, "%s=%s\n", "TERM", getenv("TERM"));
+  fprintf(stdout, "%s=%s\n", "PAGER", getenv("PAGER"));
+  fprintf(stdout, "%s=%s\n", "EDITOR/VISUAL", getenv("EDITOR/VISUAL"));
+  return 0;
+}
+
+int set(char *variable, char *valor) {
+  if (valor == NULL) {
+    char *aux = getenv(variable);
+    fprintf(stdout, "%s=%s\n", variable, aux);
+  } else {
+    setenv(variable, valor, 1);
+  }
+  return 0;
+}
 
 int main(void) {
   fprintf(stderr, "\n");
@@ -133,10 +156,6 @@ int main(void) {
       } else if (strcmp(argv[0], "umask") == 0) {
         int a = mascara(argv[1]);
         printf("%o\n", a);
-      } else if (strcmp(argv[0], "set") == 0) {
-        for (argc = 0; argv[argc]; argc++) {
-          // printf("%s ", argv[argc]);
-        }
       } else if (strcmp(argv[0], "limit") == 0) {
         if (argv[1] == NULL)
           limites();
@@ -158,9 +177,17 @@ int main(void) {
               "El recurso: «%s» no existe o no está implementada su gestión\n",
               argv[1]);
         }
-
       } else if (strcmp(argv[0], "set") == 0) {
-        set();
+        if (argv[1] == NULL)
+          sets();
+        else if (argv[2] == NULL) {
+          set(argv[1], argv[2]);
+        } else {
+          char valor[1024] = "\0";
+          for (int i = 2; argv[i] != NULL; i++)
+            strcat(valor, argv[i]);
+          set(argv[1], valor);
+        }
       } else {
         pid_t pid = fork();
 
