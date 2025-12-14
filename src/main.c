@@ -32,13 +32,8 @@
 #define ansigreen "\x1b[1;32m"
 #define ansireset "\x1b[0m"
 
-enum comandos {
-  CD = 1,
-  UMASK,
-  LIMIT,
-  SET,
-};
 char *home;
+int bgpid;
 
 extern int obtain_order(char ****argvvp, char *filep[3],
                         int *bgp); /* See parser.y for description */
@@ -119,6 +114,11 @@ int set(char *variable, char *valor) {
 }
 
 int main(void) {
+  sigset_t mask;
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGQUIT);
+  sigprocmask(SIG_BLOCK, &mask, NULL);
+
   fprintf(stderr, "\n");
   char ***argvv = NULL;
   int argvc;
@@ -189,17 +189,30 @@ int main(void) {
           set(argv[1], valor);
         }
       } else {
+        /*TODO: Cambiar las señales que se le pasan al fork si este no es en
+         * segundo plano*/
         pid_t pid = fork();
 
         if (pid == -1) {
           fprintf(stderr, "ERROR fork");
         } else if (pid == 0) {
+          if (bg != 1) {
+            sigset_t mascproc;
+            sigemptyset(&mascproc);
+            sigprocmask(SIG_SETMASK, &mascproc, NULL);
+          }
+
           if (execvp(argv[0], argv) == -1) {
             fprintf(stderr, "ERROR execvp");
           }
         } else {
           int valor;
-          wait(&valor);
+          if (bg != 1) {
+            wait(&valor);
+          } else {
+            bgpid = pid;
+            printf("[%d]\n", bgpid);
+          }
         }
       }
 
