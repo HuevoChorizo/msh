@@ -31,9 +31,12 @@
 #define ansiblue "\033[1;36m"
 #define ansigreen "\x1b[1;32m"
 #define ansireset "\x1b[0m"
-
+extern char **environ;
 char *home;
+char *prompt;
+int mypid;
 int bgpid;
+int status;
 
 extern int obtain_order(char ****argvvp, char *filep[3],
                         int *bgp); /* See parser.y for description */
@@ -90,16 +93,10 @@ int limit(int recurso, char *argv, char *entrada) {
 }
 
 int sets() {
-  fprintf(stdout, "%s=%s\n", "USER", getenv("USER"));
-  fprintf(stdout, "%s=%s\n", "LOGNAME", getenv("LOGNAME"));
-  fprintf(stdout, "%s=%s\n", "HOME", getenv("HOME"));
-  fprintf(stdout, "%s=%s\n", "LANG", getenv("LANG"));
-  fprintf(stdout, "%s=%s\n", "PATH", getenv("PATH"));
-  fprintf(stdout, "%s=%s\n", "PWD", getenv("PWD"));
-  fprintf(stdout, "%s=%s\n", "SHELL", getenv("SHELL"));
-  fprintf(stdout, "%s=%s\n", "TERM", getenv("TERM"));
-  fprintf(stdout, "%s=%s\n", "PAGER", getenv("PAGER"));
-  fprintf(stdout, "%s=%s\n", "EDITOR/VISUAL", getenv("EDITOR/VISUAL"));
+  int i = 0;
+  while (environ[i]) {
+    printf("%s\n", environ[i++]);
+  }
   return 0;
 }
 
@@ -114,6 +111,7 @@ int set(char *variable, char *valor) {
 }
 
 int main(void) {
+
   sigset_t mask;
   sigaddset(&mask, SIGINT);
   sigaddset(&mask, SIGQUIT);
@@ -149,54 +147,147 @@ int main(void) {
 #if 1
 
     for (argvc = 0; (argv = argvv[argvc]); argvc++) {
+      /*TODO: pasar la señal bg y hacer un fork en caso de que esté activa*/
       if (strcmp(argv[0], "cd") == 0) {
-        int a = cd(argv[1]);
-        if (a == -1)
-          printf("Directorio inválido");
-      } else if (strcmp(argv[0], "umask") == 0) {
-        int a = mascara(argv[1]);
-        printf("%o\n", a);
-      } else if (strcmp(argv[0], "limit") == 0) {
-        if (argv[1] == NULL)
-          limites();
-        else if (strcmp(argv[1], "cpu") == 0) {
-          limit(RLIMIT_CPU, argv[1], argv[2]);
-        } else if (strcmp(argv[1], "fsize") == 0) {
-          limit(RLIMIT_FSIZE, argv[1], argv[2]);
-        } else if (strcmp(argv[1], "data") == 0) {
-          limit(RLIMIT_DATA, argv[1], argv[2]);
-        } else if (strcmp(argv[1], "stack") == 0) {
-          limit(RLIMIT_STACK, argv[1], argv[2]);
-        } else if (strcmp(argv[1], "core") == 0) {
-          limit(RLIMIT_CORE, argv[1], argv[2]);
-        } else if (strcmp(argv[1], "nofile") == 0) {
-          limit(RLIMIT_NOFILE, argv[1], argv[2]);
+        pid_t pid1, pid2;
+        pid1 = fork();
+
+        if (pid1 == -1) {
+          fprintf(stderr, "ERROR fork");
+        } else if (pid1 == 0) {
+          if (bg) {
+            pid2 = fork();
+            if (pid2 == -1)
+              fprintf(stderr, "ERROR fork");
+            else if (pid2 == 0) {
+              int a = cd(argv[1]);
+              if (a == -1) {
+                fprintf(stderr, "Directorio inválido");
+              }
+              exit(0);
+            } else {
+              bgpid = pid2;
+              printf("[%d]\n", bgpid);
+              exit(0);
+            }
+          } else {
+            sigset_t mascproc;
+            sigemptyset(&mascproc);
+            sigprocmask(SIG_SETMASK, &mascproc, NULL);
+            int a = cd(argv[1]);
+            if (a == -1) {
+              fprintf(stderr, "Directorio inválido");
+            }
+          }
         } else {
-          fprintf(
-              stderr,
-              "El recurso: «%s» no existe o no está implementada su gestión\n",
-              argv[1]);
+          wait(&pid1);
+        }
+      } else if (strcmp(argv[0], "umask") == 0) {
+        pid_t pid1, pid2;
+        pid1 = fork();
+        if (pid1 == -1) {
+          fprintf(stderr, "ERROR fork");
+        } else if (pid1 == 0) {
+          pid2 = fork();
+          if (pid2 == -1) {
+            fprintf(stderr, "ERROR fork");
+          }
+          if (pid2 == 0) {
+            if (!bg) {
+              sigset_t mascproc;
+              sigemptyset(&mascproc);
+              sigprocmask(SIG_SETMASK, &mascproc, NULL);
+            }
+            int a = mascara(argv[1]);
+            printf("%o\n", a);
+          } else if (!bg)
+            wait(&pid2);
+
+        } else {
+          wait(&pid1);
+          if (bg) {
+            bgpid = pid2;
+            printf("[%d]\n", bgpid);
+          }
+        }
+      } else if (strcmp(argv[0], "limit") == 0) {
+        pid_t pid = fork();
+        if (pid == -1) {
+          fprintf(stderr, "ERROR fork");
+        } else if (pid == 0) {
+          if (!bg) {
+            sigset_t mascproc;
+            sigemptyset(&mascproc);
+            sigprocmask(SIG_SETMASK, &mascproc, NULL);
+          }
+          if (argv[1] == NULL)
+            limites();
+          else if (strcmp(argv[1], "cpu") == 0) {
+            limit(RLIMIT_CPU, argv[1], argv[2]);
+          } else if (strcmp(argv[1], "fsize") == 0) {
+            limit(RLIMIT_FSIZE, argv[1], argv[2]);
+          } else if (strcmp(argv[1], "data") == 0) {
+            limit(RLIMIT_DATA, argv[1], argv[2]);
+          } else if (strcmp(argv[1], "stack") == 0) {
+            limit(RLIMIT_STACK, argv[1], argv[2]);
+          } else if (strcmp(argv[1], "core") == 0) {
+            limit(RLIMIT_CORE, argv[1], argv[2]);
+          } else if (strcmp(argv[1], "nofile") == 0) {
+            limit(RLIMIT_NOFILE, argv[1], argv[2]);
+          } else {
+            fprintf(stderr,
+                    "El recurso: «%s» no existe o no está implementada su "
+                    "gestión\n",
+                    argv[1]);
+          }
+
+        } else {
+          int valor;
+          if (!bg) {
+            wait(&valor);
+          } else {
+            bgpid = pid;
+            printf("[%d]\n", bgpid);
+          }
         }
       } else if (strcmp(argv[0], "set") == 0) {
-        if (argv[1] == NULL)
-          sets();
-        else if (argv[2] == NULL) {
-          set(argv[1], argv[2]);
-        } else {
-          char valor[1024] = "\0";
-          for (int i = 2; argv[i] != NULL; i++)
-            strcat(valor, argv[i]);
-          set(argv[1], valor);
-        }
-      } else {
-        /*TODO: Cambiar las señales que se le pasan al fork si este no es en
-         * segundo plano*/
         pid_t pid = fork();
 
         if (pid == -1) {
           fprintf(stderr, "ERROR fork");
         } else if (pid == 0) {
-          if (bg != 1) {
+          if (!bg) {
+            sigset_t mascproc;
+            sigemptyset(&mascproc);
+            sigprocmask(SIG_SETMASK, &mascproc, NULL);
+          }
+          if (argv[1] == NULL)
+            sets();
+          else if (argv[2] == NULL) {
+            set(argv[1], argv[2]);
+          } else {
+            char valor[1024] = "\0";
+            for (int i = 2; argv[i] != NULL; i++)
+              strcat(valor, argv[i]);
+            set(argv[1], valor);
+          }
+        } else {
+          int valor;
+          if (!bg) {
+            wait(&valor);
+          } else {
+            bgpid = pid;
+            printf("[%d]\n", bgpid);
+          }
+        }
+      } else {
+
+        pid_t pid = fork();
+
+        if (pid == -1) {
+          fprintf(stderr, "ERROR fork");
+        } else if (pid == 0) {
+          if (!bg) {
             sigset_t mascproc;
             sigemptyset(&mascproc);
             sigprocmask(SIG_SETMASK, &mascproc, NULL);
@@ -207,7 +298,7 @@ int main(void) {
           }
         } else {
           int valor;
-          if (bg != 1) {
+          if (!bg) {
             wait(&valor);
           } else {
             bgpid = pid;
