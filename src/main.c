@@ -87,6 +87,7 @@ int limit(int recurso, char *argv, char *entrada) {
     getrlimit(recurso, limite);
     limite->rlim_max = lmt;
     setrlimit(recurso, limite);
+    fprintf(stderr, "ETA");
   }
   free(limite);
   return 0;
@@ -147,79 +148,115 @@ int main(void) {
 #if 1
 
     for (argvc = 0; (argv = argvv[argvc]); argvc++) {
-      /*TODO: pasar la señal bg y hacer un fork en caso de que esté activa*/
       if (strcmp(argv[0], "cd") == 0) {
         pid_t pid1, pid2;
-        pid1 = fork();
+        if (bg) {
+          pid1 = fork();
 
-        if (pid1 == -1) {
-          fprintf(stderr, "ERROR fork");
-        } else if (pid1 == 0) {
-          if (bg) {
-            pid2 = fork();
-            if (pid2 == -1)
-              fprintf(stderr, "ERROR fork");
-            else if (pid2 == 0) {
-              int a = cd(argv[1]);
-              if (a == -1) {
-                fprintf(stderr, "Directorio inválido");
+          if (pid1 == -1) {
+            fprintf(stderr, "ERROR fork");
+          } else if (pid1 == 0) {
+            if (bg) {
+              pid2 = fork();
+              if (pid2 == -1)
+                fprintf(stderr, "ERROR fork");
+              else if (pid2 == 0) {
+                int a = cd(argv[1]);
+                if (a == -1) {
+                  fprintf(stderr, "Directorio inválido");
+                }
+                exit(0);
+              } else {
+                bgpid = pid2;
+                printf("[%d]\n", bgpid);
+                exit(0);
               }
-              exit(0);
-            } else {
-              bgpid = pid2;
-              printf("[%d]\n", bgpid);
-              exit(0);
             }
           } else {
-            sigset_t mascproc;
-            sigemptyset(&mascproc);
-            sigprocmask(SIG_SETMASK, &mascproc, NULL);
-            int a = cd(argv[1]);
-            if (a == -1) {
-              fprintf(stderr, "Directorio inválido");
-            }
+            wait(&pid1);
           }
         } else {
-          wait(&pid1);
+          int a = cd(argv[1]);
+          if (a == -1) {
+            fprintf(stderr, "Directorio inválido");
+          }
         }
       } else if (strcmp(argv[0], "umask") == 0) {
         pid_t pid1, pid2;
-        pid1 = fork();
-        if (pid1 == -1) {
-          fprintf(stderr, "ERROR fork");
-        } else if (pid1 == 0) {
-          pid2 = fork();
-          if (pid2 == -1) {
-            fprintf(stderr, "ERROR fork");
-          }
-          if (pid2 == 0) {
-            if (!bg) {
-              sigset_t mascproc;
-              sigemptyset(&mascproc);
-              sigprocmask(SIG_SETMASK, &mascproc, NULL);
-            }
-            int a = mascara(argv[1]);
-            printf("%o\n", a);
-          } else if (!bg)
-            wait(&pid2);
+        if (bg) {
+          pid1 = fork();
 
+          if (pid1 == -1) {
+            fprintf(stderr, "ERROR fork");
+          } else if (pid1 == 0) {
+            if (bg) {
+              pid2 = fork();
+              if (pid2 == -1)
+                fprintf(stderr, "ERROR fork");
+              else if (pid2 == 0) {
+                int a = mascara(argv[1]);
+                printf("%o\n", a);
+                exit(0);
+              } else {
+                bgpid = pid2;
+                printf("[%d]\n", bgpid);
+                exit(0);
+              }
+            }
+          } else {
+            wait(&pid1);
+          }
         } else {
-          wait(&pid1);
-          if (bg) {
-            bgpid = pid2;
-            printf("[%d]\n", bgpid);
-          }
+          int a = mascara(argv[1]);
+          printf("%o\n", a);
         }
+
       } else if (strcmp(argv[0], "limit") == 0) {
-        pid_t pid = fork();
-        if (pid == -1) {
-          fprintf(stderr, "ERROR fork");
-        } else if (pid == 0) {
-          if (!bg) {
-            sigset_t mascproc;
-            sigemptyset(&mascproc);
-            sigprocmask(SIG_SETMASK, &mascproc, NULL);
+        /*TODO: arreglar limit*/
+        pid_t pid1, pid2;
+        if (bg) {
+          pid1 = fork();
+          if (pid1 == -1) {
+            fprintf(stderr, "ERROR fork");
+          } else if (pid1 == 0) {
+            if (bg) {
+              pid2 = fork();
+              if (pid2 == -1)
+                fprintf(stderr, "ERROR fork");
+              else if (pid2 == 0) {
+                if (argv[1] == NULL)
+                  limites();
+                else if (strcmp(argv[1], "cpu") == 0) {
+                  limit(RLIMIT_CPU, argv[1], argv[2]);
+                } else if (strcmp(argv[1], "fsize") == 0) {
+                  limit(RLIMIT_FSIZE, argv[1], argv[2]);
+                } else if (strcmp(argv[1], "data") == 0) {
+                  limit(RLIMIT_DATA, argv[1], argv[2]);
+                } else if (strcmp(argv[1], "stack") == 0) {
+                  limit(RLIMIT_STACK, argv[1], argv[2]);
+                } else if (strcmp(argv[1], "core") == 0) {
+                  limit(RLIMIT_CORE, argv[1], argv[2]);
+                } else if (strcmp(argv[1], "nofile") == 0) {
+                  limit(RLIMIT_NOFILE, argv[1], argv[2]);
+                } else {
+                  fprintf(
+                      stderr,
+                      "El recurso: «%s» no existe o no está implementada su "
+                      "gestión\n",
+                      argv[1]);
+                }
+                exit(0);
+              } else {
+                bgpid = pid2;
+                printf("[%d]\n", bgpid);
+                exit(0);
+              }
+            }
+          } else {
+            wait(&pid1);
           }
+        } else {
+          fprintf(stderr, "GRAPO");
           if (argv[1] == NULL)
             limites();
           else if (strcmp(argv[1], "cpu") == 0) {
@@ -239,15 +276,6 @@ int main(void) {
                     "El recurso: «%s» no existe o no está implementada su "
                     "gestión\n",
                     argv[1]);
-          }
-
-        } else {
-          int valor;
-          if (!bg) {
-            wait(&valor);
-          } else {
-            bgpid = pid;
-            printf("[%d]\n", bgpid);
           }
         }
       } else if (strcmp(argv[0], "set") == 0) {
