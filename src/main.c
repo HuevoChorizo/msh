@@ -256,7 +256,6 @@ int main(void) {
             wait(&pid1);
           }
         } else {
-          fprintf(stderr, "GRAPO");
           if (argv[1] == NULL)
             limites();
           else if (strcmp(argv[1], "cpu") == 0) {
@@ -279,16 +278,40 @@ int main(void) {
           }
         }
       } else if (strcmp(argv[0], "set") == 0) {
-        pid_t pid = fork();
+        pid_t pid1, pid2;
+        if (bg) {
+          pid1 = fork();
 
-        if (pid == -1) {
-          fprintf(stderr, "ERROR fork");
-        } else if (pid == 0) {
-          if (!bg) {
-            sigset_t mascproc;
-            sigemptyset(&mascproc);
-            sigprocmask(SIG_SETMASK, &mascproc, NULL);
+          if (pid1 == -1) {
+            fprintf(stderr, "ERROR fork");
+          } else if (pid1 == 0) {
+            if (bg) {
+              pid2 = fork();
+              if (pid2 == -1)
+                fprintf(stderr, "ERROR fork");
+              else if (pid2 == 0) {
+                if (argv[1] == NULL)
+                  sets();
+                else if (argv[2] == NULL) {
+                  set(argv[1], argv[2]);
+                } else {
+                  char valor[1024] = "\0";
+                  for (int i = 2; argv[i] != NULL; i++)
+                    strcat(valor, argv[i]);
+                  set(argv[1], valor);
+                }
+
+                exit(0);
+              } else {
+                bgpid = pid2;
+                printf("[%d]\n", bgpid);
+                exit(0);
+              }
+            }
+          } else {
+            wait(&pid1);
           }
+        } else {
           if (argv[1] == NULL)
             sets();
           else if (argv[2] == NULL) {
@@ -299,43 +322,46 @@ int main(void) {
               strcat(valor, argv[i]);
             set(argv[1], valor);
           }
-        } else {
-          int valor;
-          if (!bg) {
-            wait(&valor);
-          } else {
-            bgpid = pid;
-            printf("[%d]\n", bgpid);
-          }
         }
+
+        /*TODO: Esto funciona*/
       } else {
+        pid_t pid1, pid2;
+        pid1 = fork();
 
-        pid_t pid = fork();
-
-        if (pid == -1) {
+        if (pid1 == -1) {
           fprintf(stderr, "ERROR fork");
-        } else if (pid == 0) {
-          if (!bg) {
+        } else if (pid1 == 0) {
+          if (bg) {
+            pid2 = fork();
+            if (pid2 == -1)
+              fprintf(stderr, "ERROR fork");
+            else if (pid2 == 0) {
+              if (execvp(argv[0], argv) == -1) {
+                fprintf(stderr, "ERROR execvp");
+                exit(0);
+              } else {
+              }
+            } else {
+              bgpid = pid2;
+              printf("[%d]\n", bgpid);
+              exit(0);
+            }
+          } else {
             sigset_t mascproc;
             sigemptyset(&mascproc);
             sigprocmask(SIG_SETMASK, &mascproc, NULL);
-          }
-
-          if (execvp(argv[0], argv) == -1) {
-            fprintf(stderr, "ERROR execvp");
+            if (execvp(argv[0], argv) == -1) {
+              fprintf(stderr, "ERROR execvp");
+            }
+            exit(0);
           }
         } else {
-          int valor;
-          if (!bg) {
-            wait(&valor);
-          } else {
-            bgpid = pid;
-            printf("[%d]\n", bgpid);
-          }
+          wait(&pid1);
         }
-      }
 
-      printf("\n");
+        printf("\n");
+      }
     }
   }
 #endif
