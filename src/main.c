@@ -18,6 +18,7 @@
  * THIS FILE IS TO BE MODIFIED
  */
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stddef.h> /* NULL */
 #include <stdio.h>  /* setbuf, printf */
@@ -31,6 +32,8 @@
 #define ansiblue "\033[1;36m"
 #define ansigreen "\x1b[1;32m"
 #define ansireset "\x1b[0m"
+
+/*TODO: Variables de entorno*/
 extern char **environ;
 char *home;
 char *prompt;
@@ -82,12 +85,11 @@ int limit(int recurso, char *argv, char *entrada) {
     getrlimit(recurso, limite);
     fprintf(stdout, "%s\t%ld\n", argv, limite->rlim_max);
   } else {
-    int lmt = strtol(entrada, NULL, 8);
+    int lmt = strtol(entrada, NULL, 10);
     /*TODO: Comprobar que si limit = -1, se establece el máximo.*/
     getrlimit(recurso, limite);
     limite->rlim_max = lmt;
     setrlimit(recurso, limite);
-    fprintf(stderr, "ETA");
   }
   free(limite);
   return 0;
@@ -112,11 +114,21 @@ int set(char *variable, char *valor) {
 }
 
 int main(void) {
+  char pidmsh[16];
+  sprintf(pidmsh, "%d", 1);
+  setenv("mypid", pidmsh, 1);
 
   sigset_t mask;
   sigaddset(&mask, SIGINT);
   sigaddset(&mask, SIGQUIT);
   sigprocmask(SIG_BLOCK, &mask, NULL);
+
+  int entrada_est = dup(0);
+  int salida_est = dup(1);
+  int salida_err = dup(2);
+  int rediren = 0;
+  int redirsal = 0;
+  int redirerr = 0;
 
   fprintf(stderr, "\n");
   char ***argvv = NULL;
@@ -134,8 +146,9 @@ int main(void) {
   while (1) {
     char cwd[256];
     getcwd(cwd, sizeof(cwd));
-    fprintf(stderr, ansiblue "%s\n", cwd);
-    fprintf(stderr, ansigreen "msh ☭ > " ansireset);
+    setenv("promt", strcat(cwd, "\nmsh> "), 1);
+    char *promt = getenv("promt");
+    fprintf(stderr, "%s", promt);
 
     ret = obtain_order(&argvv, filev, &bg);
     if (ret == 0)
@@ -145,9 +158,39 @@ int main(void) {
     argvc = ret - 1; /* Line */
     if (argvc == 0)
       continue; /* Empty line */
+
 #if 1
+    int i = 0;
+    while (argvv[i] != NULL) {
+      i++;
+    }
+    int pipas[i][2];
+    if (filev[0] != NULL) {
+      int fd = open(filev[0], O_RDONLY);
+      close(0);
+      dup(fd);
+      close(fd);
+      rediren = 1;
+    }
+    if (filev[1] != NULL) {
+      int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      close(1);
+      dup(fd);
+      close(fd);
+      redirsal = 1;
+    }
+    if (filev[2] != NULL) {
+      int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      close(2);
+      dup(fd);
+      close(fd);
+      redirerr = 1;
+    }
 
     for (argvc = 0; (argv = argvv[argvc]); argvc++) {
+      if (argvv[argvc++] != NULL) {
+        int ret = pipe(pipas[argvc]);
+      }
       if (strcmp(argv[0], "cd") == 0) {
         pid_t pid1, pid2;
         if (bg) {
@@ -324,7 +367,6 @@ int main(void) {
           }
         }
 
-        /*TODO: Esto funciona*/
       } else {
         pid_t pid1, pid2;
         pid1 = fork();
@@ -362,6 +404,22 @@ int main(void) {
 
         printf("\n");
       }
+    }
+
+    if (rediren) {
+      close(0);
+      dup(entrada_est);
+      rediren = 0;
+    }
+    if (redirsal) {
+      close(1);
+      dup(salida_est);
+      redirsal = 0;
+    }
+    if (redirerr) {
+      close(2);
+      dup(salida_err);
+      redirerr = 0;
     }
   }
 #endif
