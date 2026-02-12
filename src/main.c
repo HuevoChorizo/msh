@@ -144,26 +144,19 @@ int selector(char **argv) {
     return 0;
   } else if (strcmp(argv[0], "limit") == 0) {
     if (argv[1] == NULL) {
-      limites();
-      return 0;
+      return limites();
     } else if (strcmp(argv[1], "cpu") == 0) {
-      limit(RLIMIT_CPU, argv[1], argv[2]);
-      return 0;
+      return limit(RLIMIT_CPU, argv[1], argv[2]);
     } else if (strcmp(argv[1], "fsize") == 0) {
-      limit(RLIMIT_FSIZE, argv[1], argv[2]);
-      return 0;
+      return limit(RLIMIT_FSIZE, argv[1], argv[2]);
     } else if (strcmp(argv[1], "data") == 0) {
-      limit(RLIMIT_DATA, argv[1], argv[2]);
-      return 0;
+      return limit(RLIMIT_DATA, argv[1], argv[2]);
     } else if (strcmp(argv[1], "stack") == 0) {
-      limit(RLIMIT_STACK, argv[1], argv[2]);
-      return 0;
+      return limit(RLIMIT_STACK, argv[1], argv[2]);
     } else if (strcmp(argv[1], "core") == 0) {
-      limit(RLIMIT_CORE, argv[1], argv[2]);
-      return 0;
+      return limit(RLIMIT_CORE, argv[1], argv[2]);
     } else if (strcmp(argv[1], "nofile") == 0) {
-      limit(RLIMIT_NOFILE, argv[1], argv[2]);
-      return 0;
+      return limit(RLIMIT_NOFILE, argv[1], argv[2]);
     } else {
       fprintf(stderr,
               "El recurso: «%s» no existe o no está implementada su "
@@ -173,11 +166,9 @@ int selector(char **argv) {
     }
   } else if (strcmp(argv[0], "set") == 0) {
     if (argv[1] == NULL) {
-      sets();
-      return 0;
+      return sets();
     } else if (argv[2] == NULL) {
-      set(argv[1], argv[2]);
-      return 0;
+      return set(argv[1], argv[2]);
     } else {
       char valor[1024] = "\0";
       for (int i = 2; argv[i] != NULL; i++)
@@ -198,12 +189,17 @@ int main(void) {
   char *filev[3] = {NULL, NULL, NULL};
   int bg;
   int ret;
+  home = getenv("HOME");
 
   setbuf(stdout, NULL); /* Unbuffered */
   setbuf(stdin, NULL);
 
   while (1) {
-    fprintf(stderr, "%s", "msh> "); /* Prompt */
+    char cwd[256];
+    getcwd(cwd, sizeof(cwd));
+    setenv("promt", strcat(cwd, "\nmsh> "), 1);
+    char *promt = getenv("promt");
+    fprintf(stderr, "%s", promt);
     ret = obtain_order(&argvv, filev, &bg);
     if (ret == 0)
       break; /* EOF */
@@ -218,25 +214,23 @@ int main(void) {
       n++;
     }
     /*TODO: Hacer múltiples pipes para las payadas estas*/
-    int pipa[n - 1][2];
-    for (int i = 0; i <= n - 1; i++) {
+    int pipa[n][2];
+    for (int i = 0; i < n - 1; i++) {
       pipe(pipa[i]);
     }
 
     for (argvc = 0; (argv = argvv[argvc]); argvc++) {
       /*TODO: Guardar entrada y salida estándar*/
       pid_t pid1, pid2;
-      pid1 = fork();
-
-      if (pid1 == -1)
-        fprintf(stderr, "ERROR fork");
-
-      if (pid1 == 0) {
-        if (bg) {
+      if (bg) {
+        pid1 = fork();
+        if (pid1 == -1)
+          fprintf(stderr, "ERROR fork");
+        if (pid1 == 0) {
           pid2 = fork();
           if (pid2 == -1)
             fprintf(stderr, "ERROR fork");
-          else if (pid2 == 0) {
+          if (pid2 == 0) {
             int pipaGest = gestionPipes(argvc, n);
             switch (pipaGest) {
             case 1: {
@@ -250,74 +244,96 @@ int main(void) {
             case 2: {
               close(0);
               close(1);
-              dup(pipa[argvc - 2][0]);
-              dup(pipa[argvc - 1][1]);
-              close(pipa[argvc - 2][0]);
-              close(pipa[argvc - 1][1]);
+              dup(pipa[argvc - 1][0]);
+              dup(pipa[argvc][1]);
+              close(pipa[argvc - 1][0]);
+              close(pipa[argvc][1]);
               break;
             }
 
             case 3: {
               close(0);
-              dup(pipa[n - 1][0]);
-              close(pipa[n - 1][0]);
-              close(pipa[n - 1][1]);
+              dup(pipa[n - 2][0]);
+              close(pipa[n - 2][0]);
+              close(pipa[n - 2][1]);
               break;
             }
-              return 0;
             }
 
             /*TODO: EN LUGAR DE HACER UN SELECTOR, USAR EL FOR INICIAL LOL*/
-            selector(argvv[argvc]);
-            printf("%s \n", argv[0]);
-            printf("%d \n", n);
+            if (selector(argvv[argvc]) == 1) {
+              if (execvp(argv[0], argv) == -1) {
+                fprintf(stderr, "ERROR execvp");
+                exit(0);
+              }
+            }
+
             exit(0);
+
           } else {
             exit(0);
           }
         } else {
-          /*TODO: Si no hay background*/
-          int pipaGest = gestionPipes(argvc, n);
-          switch (pipaGest) {
-          case 1: {
-            close(1);
-            dup(pipa[0][1]);
-            close(pipa[0][0]);
-            close(pipa[0][1]);
-            break;
-          }
-
-          case 2: {
-            close(0);
-            close(1);
-            dup(pipa[argvc - 2][0]);
-            dup(pipa[argvc - 1][1]);
-            close(pipa[argvc - 2][0]);
-            close(pipa[argvc - 1][1]);
-            break;
-          }
-
-          case 3: {
-            close(0);
-            dup(pipa[n - 1][0]);
-            close(pipa[n - 1][0]);
-            close(pipa[n - 1][1]);
-            break;
-          }
-            return 0;
-          }
-
-          selector(argvv[argvc]);
-          exit(0);
-
-          /*TODO: Lo que sea sin background*/
+          wait(&pid1);
         }
-
-      } else {
-        wait(&pid1);
       }
-      /*TODO: redirigir entradas y salidas estandar a los valores
-       * predeterminados.*/
+      /*Sin Background:*/
+      else {
+        int seleccion = selector(argvv[argvc]);
+        if (seleccion == 1) {
+          pid1 = fork();
+          if (pid1 == 0) {
+            if (n > 1) {
+              pid2 = fork();
+              if (pid2 == 0) {
+                int pipaGest = gestionPipes(argvc, n);
+                switch (pipaGest) {
+                case 1: {
+                  close(1);
+                  dup(pipa[0][1]);
+                  close(pipa[0][0]);
+                  close(pipa[0][1]);
+                  break;
+                }
+
+                case 2: {
+                  close(0);
+                  close(1);
+                  dup(pipa[argvc - 1][0]);
+                  dup(pipa[argvc][1]);
+                  close(pipa[argvc - 1][0]);
+                  close(pipa[argvc][1]);
+                  break;
+                }
+
+                case 3: {
+                  close(0);
+                  dup(pipa[n - 2][0]);
+                  close(pipa[n - 2][0]);
+                  close(pipa[n - 2][1]);
+                  break;
+                }
+                }
+                if (execvp(argv[0], argv) == -1) {
+                  fprintf(stderr, "ERROR execvp");
+                  exit(1);
+                }
+                exit(0);
+              } else {
+                exit(0);
+              }
+            } else {
+              if (execvp(argv[0], argv) == -1) {
+                fprintf(stderr, "ERROR execvp");
+                exit(1);
+              }
+              exit(0);
+            }
+          } else {
+            wait(&pid1);
+          }
+        }
+      }
     }
   }
 
