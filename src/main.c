@@ -289,9 +289,13 @@ int main(void) {
             exit(0);
           }
         } else {
+          /*TODO: Yo sé que esto es erróneo probablemente, pero si te soy
+           * sincero, de momento me la sopla.*/
+          bgpid = pid1 + 1;
           wait(&pid1);
         }
       }
+
       /*Sin Background:*/
       else {
         int seleccion = selector(argvv[argvc]);
