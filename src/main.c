@@ -17,11 +17,12 @@
  * DO NOT MODIFY ANYTHING OVER THIS LINE
  * THIS FILE IS TO BE MODIFIED
  */
+
 /*TODO: GENERAL
- * -> PIPES, ARREGLAR LO DE LAS MÚLTIPLES
  * -> REDIRECCIÓN Y TAL
- * -> SELECTOR
- * -> METER LAS MIERDAS VIEJAS
+ * -> Variables especiales
+ * -> Metacaracteres
+ * -> Expansión de Variable
  */
 
 #include <fcntl.h>
@@ -133,8 +134,6 @@ int set(char *variable, char *valor) {
   return 0;
 }
 
-/*TODO: Cambiar los returns si funcionan o no, dependiendo de tal devuelve lo
- * que sea.*/
 int selector(char **argv) {
   if (strcmp(argv[0], "cd") == 0) {
     return cd(argv[1]);
@@ -182,6 +181,16 @@ int selector(char **argv) {
 }
 
 int main(void) {
+  mypid = getpid();
+  char pidmsh[16];
+  sprintf(pidmsh, "%d", mypid);
+  setenv("mypid", pidmsh, 1);
+
+  sigset_t mask;
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGQUIT);
+  sigprocmask(SIG_BLOCK, &mask, NULL);
+
   char ***argvv = NULL;
   int argvc;
   char **argv = NULL;
@@ -195,11 +204,16 @@ int main(void) {
   setbuf(stdin, NULL);
 
   while (1) {
+    char bgpidc[16];
+    sprintf(bgpidc, "%d", bgpid);
+    setenv("bgpid", bgpidc, 1);
+
     char cwd[256];
     getcwd(cwd, sizeof(cwd));
     setenv("promt", strcat(cwd, "\nmsh> "), 1);
     char *promt = getenv("promt");
     fprintf(stderr, "%s", promt);
+
     ret = obtain_order(&argvv, filev, &bg);
     if (ret == 0)
       break; /* EOF */
@@ -260,7 +274,6 @@ int main(void) {
             }
             }
 
-            /*TODO: EN LUGAR DE HACER UN SELECTOR, USAR EL FOR INICIAL LOL*/
             if (selector(argvv[argvc]) == 1) {
               if (execvp(argv[0], argv) == -1) {
                 fprintf(stderr, "ERROR execvp");
@@ -271,6 +284,8 @@ int main(void) {
             exit(0);
 
           } else {
+            bgpid = pid2;
+            printf("[%d]\n", bgpid);
             exit(0);
           }
         } else {
@@ -283,6 +298,9 @@ int main(void) {
         if (seleccion == 1) {
           pid1 = fork();
           if (pid1 == 0) {
+            sigset_t mascproc;
+            sigemptyset(&mascproc);
+            sigprocmask(SIG_SETMASK, &mascproc, NULL);
             if (n > 1) {
               pid2 = fork();
               if (pid2 == 0) {
