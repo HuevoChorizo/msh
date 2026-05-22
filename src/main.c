@@ -19,7 +19,6 @@
  */
 
 /*TODO: GENERAL
- * -> REDIRECCIÓN Y TAL
  * -> Metacaracteres
  * -> Expansión de Variable
  */
@@ -191,6 +190,13 @@ int main(void) {
   sigaddset(&mask, SIGQUIT);
   sigprocmask(SIG_BLOCK, &mask, NULL);
 
+  int entrada_est = dup(0);
+  int salida_est = dup(1);
+  int salida_err = dup(2);
+  int rediren = 0;
+  int redirsal = 0;
+  int redirerr = 0;
+
   char ***argvv = NULL;
   int argvc;
   char **argv = NULL;
@@ -233,10 +239,32 @@ int main(void) {
     while (argvv[n] != NULL) {
       n++;
     }
-    /*TODO: Hacer múltiples pipes para las payadas estas*/
     int pipa[n][2];
     for (int i = 0; i < n - 1; i++) {
       pipe(pipa[i]);
+    }
+
+    /*TODO: Redireccion*/
+    if (filev[0] != NULL) {
+      int fd = open(filev[0], O_RDONLY);
+      close(0);
+      dup(fd);
+      close(fd);
+      rediren = 1;
+    }
+    if (filev[1] != NULL) {
+      int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      close(1);
+      dup(fd);
+      close(fd);
+      redirsal = 1;
+    }
+    if (filev[2] != NULL) {
+      int fd = open(filev[1], O_WRONLY | O_CREAT | O_TRUNC, 0666);
+      close(2);
+      dup(fd);
+      close(fd);
+      redirerr = 1;
     }
 
     for (argvc = 0; (argv = argvv[argvc]); argvc++) {
@@ -363,6 +391,21 @@ int main(void) {
           }
         }
       }
+    }
+    if (rediren) {
+      close(0);
+      dup(entrada_est);
+      rediren = 0;
+    }
+    if (redirsal) {
+      close(1);
+      dup(salida_est);
+      redirsal = 0;
+    }
+    if (redirerr) {
+      close(2);
+      dup(salida_err);
+      redirerr = 0;
     }
   }
 
