@@ -20,7 +20,6 @@
 
 /*TODO: GENERAL
  * -> REDIRECCIÓN Y TAL
- * -> Variables especiales
  * -> Metacaracteres
  * -> Expansión de Variable
  */
@@ -101,6 +100,7 @@ int limites() {
 }
 
 int limit(int recurso, char *argv, char *entrada) {
+  int resultado;
   struct rlimit *limite = malloc(2 * sizeof(rlim_t));
   if (entrada == NULL) {
     getrlimit(recurso, limite);
@@ -110,10 +110,10 @@ int limit(int recurso, char *argv, char *entrada) {
     /*TODO: Comprobar que si limit = -1, se establece el máximo.*/
     getrlimit(recurso, limite);
     limite->rlim_max = lmt;
-    setrlimit(recurso, limite);
+    resultado = setrlimit(recurso, limite);
   }
   free(limite);
-  return 0;
+  return resultado;
 }
 
 int sets() {
@@ -129,7 +129,7 @@ int set(char *variable, char *valor) {
     char *aux = getenv(variable);
     fprintf(stdout, "%s=%s\n", variable, aux);
   } else {
-    setenv(variable, valor, 1);
+    return setenv(variable, valor, 1);
   }
   return 0;
 }
@@ -198,21 +198,27 @@ int main(void) {
   char *filev[3] = {NULL, NULL, NULL};
   int bg;
   int ret;
+  int status = 0;
+  int statussal;
   home = getenv("HOME");
+  set("prompt", "msh> ");
 
   setbuf(stdout, NULL); /* Unbuffered */
   setbuf(stdin, NULL);
 
   while (1) {
+    char statusc[16];
+    sprintf(statusc, "%d", status);
+    setenv("status", statusc, 1);
     char bgpidc[16];
     sprintf(bgpidc, "%d", bgpid);
     setenv("bgpid", bgpidc, 1);
+    /*TODO: Cambiar el modo de funcionar del promt.*/
+    // No sé si está terminado o no, tendría que revisar la documentación, pero
+    // es una aproximación «funcional»
 
-    char cwd[256];
-    getcwd(cwd, sizeof(cwd));
-    setenv("promt", strcat(cwd, "\nmsh> "), 1);
-    char *promt = getenv("promt");
-    fprintf(stderr, "%s", promt);
+    prompt = getenv("prompt");
+    fprintf(stderr, "%s", prompt);
 
     ret = obtain_order(&argvv, filev, &bg);
     if (ret == 0)
@@ -234,7 +240,6 @@ int main(void) {
     }
 
     for (argvc = 0; (argv = argvv[argvc]); argvc++) {
-      /*TODO: Guardar entrada y salida estándar*/
       pid_t pid1, pid2;
       if (bg) {
         pid1 = fork();
@@ -277,7 +282,7 @@ int main(void) {
             if (selector(argvv[argvc]) == 1) {
               if (execvp(argv[0], argv) == -1) {
                 fprintf(stderr, "ERROR execvp");
-                exit(0);
+                exit(-1);
               }
             }
 
@@ -290,7 +295,7 @@ int main(void) {
           }
         } else {
           /*TODO: Yo sé que esto es erróneo probablemente, pero si te soy
-           * sincero, de momento me la sopla.*/
+           * sincero, de momento funciona.*/
           bgpid = pid1 + 1;
           wait(&pid1);
         }
@@ -299,6 +304,7 @@ int main(void) {
       /*Sin Background:*/
       else {
         int seleccion = selector(argvv[argvc]);
+        status = seleccion;
         if (seleccion == 1) {
           pid1 = fork();
           if (pid1 == 0) {
@@ -338,7 +344,7 @@ int main(void) {
                 }
                 if (execvp(argv[0], argv) == -1) {
                   fprintf(stderr, "ERROR execvp");
-                  exit(1);
+                  exit(-1);
                 }
                 exit(0);
               } else {
@@ -346,13 +352,14 @@ int main(void) {
               }
             } else {
               if (execvp(argv[0], argv) == -1) {
-                fprintf(stderr, "ERROR execvp");
-                exit(1);
+                fprintf(stderr, "ERROR execvp\n");
+                exit(-1);
               }
               exit(0);
             }
           } else {
-            wait(&pid1);
+            waitpid(pid1, &statussal, 0);
+            status = WEXITSTATUS(statussal);
           }
         }
       }
