@@ -105,17 +105,17 @@ int mascara(char *entrada) {
 int limites() {
   struct rlimit *limite = malloc(2 * sizeof(rlim_t));
   getrlimit(RLIMIT_CPU, limite);
-  fprintf(stdout, "cpu\t%ld\n", limite->rlim_max);
+  fprintf(stdout, "cpu\t%ld\n", limite->rlim_cur);
   getrlimit(RLIMIT_FSIZE, limite);
-  fprintf(stdout, "fsize\t%ld\n", limite->rlim_max);
+  fprintf(stdout, "fsize\t%ld\n", limite->rlim_cur);
   getrlimit(RLIMIT_DATA, limite);
-  fprintf(stdout, "data\t%ld\n", limite->rlim_max);
+  fprintf(stdout, "data\t%ld\n", limite->rlim_cur);
   getrlimit(RLIMIT_STACK, limite);
-  fprintf(stdout, "stack\t%ld\n", limite->rlim_max);
+  fprintf(stdout, "stack\t%ld\n", limite->rlim_cur);
   getrlimit(RLIMIT_CORE, limite);
-  fprintf(stdout, "core\t%ld\n", limite->rlim_max);
+  fprintf(stdout, "core\t%ld\n", limite->rlim_cur);
   getrlimit(RLIMIT_NOFILE, limite);
-  fprintf(stdout, "nofile\t%ld\n", limite->rlim_max);
+  fprintf(stdout, "nofile\t%ld\n", limite->rlim_cur);
   free(limite);
   return 0;
 }
@@ -129,23 +129,20 @@ int limit(int recurso, char *argv, char *entrada) {
       perror("getrlimit");
       return -1;
     }
-    fprintf(stdout, "%s\t%ld\n", argv, (long)limite.rlim_max);
+    fprintf(stdout, "%s\t%ld\n", argv, (long)limite.rlim_cur);
   } else {
     rlim_t lmt;
     if (strcmp(entrada, "-1") == 0) {
       lmt = RLIM_INFINITY;
     } else {
-      unsigned long val = strtoul(entrada, NULL, 10);
-      lmt = (rlim_t)val;
+      lmt = atoi(entrada);
     }
     if (getrlimit(recurso, &limite) == -1) {
       perror("getrlimit");
       return -1;
     }
-    limite.rlim_max = lmt;
-    if (limite.rlim_cur > lmt && lmt != RLIM_INFINITY) {
-      limite.rlim_cur = lmt;
-    }
+    limite.rlim_cur = lmt;
+
     if (setrlimit(recurso, &limite) == -1) {
       perror("setrlimit");
       return -1;
@@ -332,20 +329,15 @@ int main(void) {
     }
     if (error_redir == 0) {
       if (bg) {
-        pid_t pids_intermedios[n];
-        pid_t pids_reales[n];
         for (argvc = 0; (argv = argvv[argvc]); argvc++) {
-          pid_t pid1 = fork();
-          if (pid1 == -1) {
+          pid_t pid1, pid2;
+          pid1 = fork();
+          if (pid1 == -1)
             fprintf(stderr, "ERROR fork");
-            continue;
-          }
           if (pid1 == 0) {
-            pid_t pid2 = fork();
-            if (pid2 == -1) {
+            pid2 = fork();
+            if (pid2 == -1)
               fprintf(stderr, "ERROR fork");
-              exit(-1);
-            }
             if (pid2 == 0) {
               int pipaGest = gestionPipes(argvc, n);
               switch (pipaGest) {
@@ -356,6 +348,7 @@ int main(void) {
                 close(pipa[0][1]);
                 break;
               }
+
               case 2: {
                 close(0);
                 close(1);
@@ -365,6 +358,7 @@ int main(void) {
                 close(pipa[argvc][1]);
                 break;
               }
+
               case 3: {
                 close(0);
                 dup(pipa[n - 2][0]);
@@ -373,94 +367,109 @@ int main(void) {
                 break;
               }
               }
+
               if (selector(argvv[argvc]) == 1) {
                 if (execvp(argv[0], argv) == -1) {
-                  fprintf(stderr, "ERROR execvp\n");
+                  fprintf(stderr, "ERROR execvp");
                   exit(-1);
                 }
               }
+
               exit(0);
+
             } else {
+              bgpid = pid2;
+              printf("[%d]\n", bgpid);
               exit(0);
             }
           } else {
-            pids_intermedios[argvc] = pid1;
-            pids_reales[argvc] = pid1 + 1;
+            /*TODO: Yo sé que esto es erróneo probablemente, pero si te soy
+             * sincero, de momento funciona.*/
+            bgpid = pid1 + 1;
+            wait(&pid1);
           }
         }
-        for (int i = 0; i < n - 1; i++) {
-          close(pipa[i][0]);
-          close(pipa[i][1]);
-        }
-        for (int i = 0; i < n; i++) {
-          waitpid(pids_intermedios[i], NULL, 0);
-        }
-        bgpid = pids_reales[n - 1];
-        printf("[%d]\n", bgpid);
+
       } else {
         pid_t pids[n];
         for (argvc = 0; (argv = argvv[argvc]); argvc++) {
           /*TODO: Metacaracteres*/
-          int seleccion = selector(argvv[argvc]);
-          status = seleccion;
-          if (seleccion == 1) {
+          if (n > 1) {
             pid_t pid1 = fork();
             if (pid1 == 0) {
               sigset_t mascproc;
               sigemptyset(&mascproc);
               sigprocmask(SIG_SETMASK, &mascproc, NULL);
-              if (n > 1) {
-                int pipaGest = gestionPipes(argvc, n);
-                switch (pipaGest) {
-                case 1: {
-                  close(1);
-                  dup(pipa[0][1]);
-                  for (int i = 0; i < n - 1; i++) {
-                    close(pipa[i][0]);
-                    close(pipa[i][1]);
-                  }
-                  break;
-                }
 
-                case 2: {
-                  close(0);
-                  close(1);
-                  dup(pipa[argvc - 1][0]);
-                  dup(pipa[argvc][1]);
-                  for (int i = 0; i < n - 1; i++) {
-                    close(pipa[i][0]);
-                    close(pipa[i][1]);
-                  }
-                  break;
+              int pipaGest = gestionPipes(argvc, n);
+              switch (pipaGest) {
+              case 1: {
+                close(1);
+                dup(pipa[0][1]);
+                for (int i = 0; i < n - 1; i++) {
+                  close(pipa[i][0]);
+                  close(pipa[i][1]);
                 }
+                break;
+              }
 
-                case 3: {
-                  close(0);
-                  dup(pipa[n - 2][0]);
-                  for (int i = 0; i < n - 1; i++) {
-                    close(pipa[i][0]);
-                    close(pipa[i][1]);
-                  }
-                  break;
+              case 2: {
+                close(0);
+                close(1);
+                dup(pipa[argvc - 1][0]);
+                dup(pipa[argvc][1]);
+                for (int i = 0; i < n - 1; i++) {
+                  close(pipa[i][0]);
+                  close(pipa[i][1]);
                 }
+                break;
+              }
+
+              case 3: {
+                close(0);
+                dup(pipa[n - 2][0]);
+                for (int i = 0; i < n - 1; i++) {
+                  close(pipa[i][0]);
+                  close(pipa[i][1]);
                 }
+                break;
+              }
+              } // termina el switch
+
+              int seleccion = selector(argvv[argvc]);
+              status = seleccion;
+              if (seleccion == 1) {
                 if (execvp(argv[0], argv) == -1) {
                   fprintf(stderr, "ERROR execvp\n");
                   exit(-1);
                 }
                 exit(0);
               } else {
-                if (execvp(argv[0], argv) == -1) {
-                  fprintf(stderr, "ERROR execvp\n");
-                  exit(-1);
-                }
-                exit(0);
+                exit(status);
               }
             } else {
               pids[argvc] = pid1;
             }
           } else {
-            pids[argvc] = -1;
+            int seleccion = selector(argvv[argvc]);
+            status = seleccion;
+            if (seleccion == 1) {
+              pid_t pid1 = fork();
+              if (pid1 == 0) {
+                sigset_t mascproc;
+                sigemptyset(&mascproc);
+                sigprocmask(SIG_SETMASK, &mascproc, NULL);
+                if (execvp(argv[0], argv) == -1) {
+                  fprintf(stderr, "ERROR execvp\n");
+                  exit(-1);
+                }
+                exit(0);
+              } else {
+                pids[argvc] = pid1;
+              }
+            } else {
+              pids[argvc] = -1;
+            }
           }
         }
         for (int i = 0; i < n - 1; i++) {
