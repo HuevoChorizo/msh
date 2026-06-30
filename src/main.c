@@ -185,24 +185,29 @@ int selector(char **argv) {
   } else if (strcmp(argv[0], "limit") == 0) {
     if (argv[1] == NULL) {
       return limites();
-    } else if (strcmp(argv[1], "cpu") == 0) {
-      return limit(RLIMIT_CPU, argv[1], argv[2]);
-    } else if (strcmp(argv[1], "fsize") == 0) {
-      return limit(RLIMIT_FSIZE, argv[1], argv[2]);
-    } else if (strcmp(argv[1], "data") == 0) {
-      return limit(RLIMIT_DATA, argv[1], argv[2]);
-    } else if (strcmp(argv[1], "stack") == 0) {
-      return limit(RLIMIT_STACK, argv[1], argv[2]);
-    } else if (strcmp(argv[1], "core") == 0) {
-      return limit(RLIMIT_CORE, argv[1], argv[2]);
-    } else if (strcmp(argv[1], "nofile") == 0) {
-      return limit(RLIMIT_NOFILE, argv[1], argv[2]);
+    } else if (argv[2] == NULL || argv[3] == NULL) {
+      if (strcmp(argv[1], "cpu") == 0) {
+        return limit(RLIMIT_CPU, argv[1], argv[2]);
+      } else if (strcmp(argv[1], "fsize") == 0) {
+        return limit(RLIMIT_FSIZE, argv[1], argv[2]);
+      } else if (strcmp(argv[1], "data") == 0) {
+        return limit(RLIMIT_DATA, argv[1], argv[2]);
+      } else if (strcmp(argv[1], "stack") == 0) {
+        return limit(RLIMIT_STACK, argv[1], argv[2]);
+      } else if (strcmp(argv[1], "core") == 0) {
+        return limit(RLIMIT_CORE, argv[1], argv[2]);
+      } else if (strcmp(argv[1], "nofile") == 0) {
+        return limit(RLIMIT_NOFILE, argv[1], argv[2]);
+      } else {
+        fprintf(stderr,
+                "El recurso: «%s» no existe o no está implementada su "
+                "gestión\n",
+                argv[1]);
+        return -1;
+      }
     } else {
-      fprintf(stderr,
-              "El recurso: «%s» no existe o no está implementada su "
-              "gestión\n",
-              argv[1]);
-      return 0;
+      fprintf(stderr, "Más de 2 argumentos\n");
+      return -1;
     }
   } else if (strcmp(argv[0], "set") == 0) {
     if (argv[1] == NULL) {
@@ -211,8 +216,12 @@ int selector(char **argv) {
       return set(argv[1], argv[2]);
     } else {
       char valor[1024] = "\0";
-      for (int i = 2; argv[i] != NULL; i++)
+      for (int i = 2; argv[i] != NULL; i++) {
         strcat(valor, argv[i]);
+        if (argv[i + 1] != NULL)
+          strcat(valor, " ");
+      }
+
       set(argv[1], valor);
       return 0;
     }
@@ -264,8 +273,8 @@ int main(void) {
     sprintf(bgpidc, "%d", bgpid);
     setenv("bgpid", bgpidc, 1);
     /*TODO: Cambiar el modo de funcionar del promt.*/
-    // No sé si está terminado o no, tendría que revisar la documentación, pero
-    // es una aproximación «funcional»
+    // No sé si está terminado o no, tendría que revisar la documentación,
+    // pero es una aproximación «funcional»
 
     prompt = getenv("prompt");
     fprintf(stderr, "%s", prompt);
